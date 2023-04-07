@@ -240,7 +240,6 @@ impl<'a> TapParser<'a> {
 
             if self.in_body {
                 self.done = true;
-                todo!()
             } else {
                 self.in_body = true;
             }
@@ -303,6 +302,10 @@ impl<'a> TapParser<'a> {
                 }
             }
             State::Body | State::AfterTest => {
+                if !self.read_plan {
+                    self.in_body = true;
+                }
+
                 if line.starts_with("    ")
                     || (line.len() >= 9 && line[0..9].to_lowercase() == "# subtest")
                 {
