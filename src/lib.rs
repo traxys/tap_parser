@@ -140,6 +140,8 @@ pub enum Error {
     Bailed(String),
     #[error("Line is unknown: {0}")]
     UnknownLine(String),
+    #[error("Duplicated plan")]
+    DuplicatedPlan,
 }
 
 ///
@@ -224,6 +226,10 @@ impl<'a> TapParser<'a> {
 
     fn read_body_line(&mut self, line: &'a str) -> Result<(), Error> {
         if let Some(pr) = line.strip_prefix("1..") {
+            if self.read_plan {
+                return Err(Error::DuplicatedPlan);
+            }
+
             let (count, reason) = match pr.split_once('#') {
                 None => (pr.trim().parse()?, None),
                 Some((num, reason)) => (num.trim().parse()?, Some(reason.trim())),
