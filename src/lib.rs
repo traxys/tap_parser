@@ -91,7 +91,7 @@ impl<'a> TapStatement<'a> {
         match self {
             Self::TestPoint(t) => t,
             Self::Subtest(t) => &mut t.ending,
-            _ => panic!("Statement {self:?} was not a TestPoint/Subtest"),
+            _ => unreachable!("Statement {self:?} was not a TestPoint/Subtest"),
         }
     }
 }
