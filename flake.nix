@@ -24,7 +24,7 @@
       };
     in {
       devShell = pkgs.mkShell {
-        nativeBuildInputs = [rust];
+        nativeBuildInputs = [rust pkgs.cargo-tarpaulin];
         RUST_PATH = "${rust}";
         shellHook = ''
           alias rstddoc="firefox ${rust}/share/doc/rust/html/std/index.html"
