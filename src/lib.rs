@@ -409,11 +409,23 @@ impl<'a> Default for TapParser<'a> {
 mod test {
     use crate::{Error, TapParser, TapStatement, TapTest};
 
+    fn assert_statements(body: Vec<TapStatement>, expected: Vec<TapStatement>) {
+        body.iter().zip(&expected).enumerate().for_each(|(i,(b,e))|
+            if b != e {
+                panic!("Statement {i} differs, expected: {b:#?}\ngot: {e:#?}");
+            }
+        );
+
+        if body.len() != expected.len() {
+            panic!("Statement length differ: expected: {expected:#?}\ngot: {body:#?}")
+        }
+    }
+
     #[test]
     fn empty() {
         let document = "TAP version 14\n1..0\n";
         let mut parser = TapParser::new();
-        assert_eq!(
+        assert_statements(
             parser.parse(document).unwrap(),
             vec![TapStatement::Plan(crate::TapPlan {
                 count: 0,
@@ -427,7 +439,7 @@ mod test {
         let document = 
             "TAP version 14\n1..1\n# Subtest: subtest\n    ok 1 - inside subtest\n    1..1\nok 1 - subtest";
         let mut parser = TapParser::new();
-        assert_eq!(
+        assert_statements(
             parser.parse(document).unwrap(),
             vec![
                 TapStatement::Plan(crate::TapPlan {
@@ -466,7 +478,7 @@ mod test {
         let document = 
             "TAP version 14\n1..1\n# Subtest\n    ok 1 - inside subtest\n    1..1\nok 1 - subtest";
         let mut parser = TapParser::new();
-        assert_eq!(
+        assert_statements(
             parser.parse(document).unwrap(),
             vec![
                 TapStatement::Plan(crate::TapPlan {
@@ -504,7 +516,7 @@ mod test {
     fn subtest_bare() {
         let document = "TAP version 14\n1..1\n    ok 1 - inside subtest\n    1..1\nok 1 - subtest";
         let mut parser = TapParser::new();
-        assert_eq!(
+        assert_statements(
             parser.parse(document).unwrap(),
             vec![
                 TapStatement::Plan(crate::TapPlan {
@@ -542,7 +554,7 @@ mod test {
     fn empty_with_reason() {
         let document = "TAP version 14\n1..0 # no tests to run\n";
         let mut parser = TapParser::new();
-        assert_eq!(
+        assert_statements(
             parser.parse(document).unwrap(),
             vec![TapStatement::Plan(crate::TapPlan {
                 count: 0,
@@ -555,7 +567,7 @@ mod test {
     fn comment() {
         let document = "TAP version 14\n1..1\n#   This is a comment";
         let mut parser = TapParser::new();
-        assert_eq!(
+        assert_statements(
             parser.parse(document).unwrap(),
             vec![
                 TapStatement::Plan(crate::TapPlan {
@@ -571,7 +583,7 @@ mod test {
     fn single_sucess() {
         let document = "TAP version 14\n1..1\nok 1 - this is a success";
         let mut parser = TapParser::new();
-        assert_eq!(
+        assert_statements(
             parser.parse(document).unwrap(),
             vec![
                 TapStatement::Plan(crate::TapPlan {
@@ -621,7 +633,7 @@ mod test {
             parser.parse(document),
             Err(Error::Bailed("We wanted to".into()))
         );
-        assert_eq!(
+        assert_statements(
             parser.statements(),
             vec![
                 TapStatement::Plan(crate::TapPlan {
@@ -659,7 +671,7 @@ mod test {
         let document =
             "TAP version 14\n1..1\nnot ok 1 - failure\n  ---\n  failure:\n     - why not\n  ...\n";
         let mut parser = TapParser::new();
-        assert_eq!(
+        assert_statements(
             parser.parse(document).unwrap(),
             vec![
                 TapStatement::Plan(crate::TapPlan {
@@ -681,7 +693,7 @@ mod test {
     fn single_sucess_skip() {
         let document = "TAP version 14\n1..1\nok 1 - desc # SKIP";
         let mut parser = TapParser::new();
-        assert_eq!(
+        assert_statements(
             parser.parse(document).unwrap(),
             vec![
                 TapStatement::Plan(crate::TapPlan {
@@ -706,7 +718,7 @@ mod test {
     fn single_sucess_skip_reason() {
         let document = "TAP version 14\n1..1\nok 1 - desc # SKIP  has no power";
         let mut parser = TapParser::new();
-        assert_eq!(
+        assert_statements(
             parser.parse(document).unwrap(),
             vec![
                 TapStatement::Plan(crate::TapPlan {
@@ -731,7 +743,7 @@ mod test {
     fn single_sucess_skip_mixed_case() {
         let document = "TAP version 14\n1..1\nok 1 - desc # sKiP";
         let mut parser = TapParser::new();
-        assert_eq!(
+        assert_statements(
             parser.parse(document).unwrap(),
             vec![
                 TapStatement::Plan(crate::TapPlan {
@@ -756,7 +768,7 @@ mod test {
     fn single_sucess_bare() {
         let document = "TAP version 14\n1..1\nok";
         let mut parser = TapParser::new();
-        assert_eq!(
+        assert_statements(
             parser.parse(document).unwrap(),
             vec![
                 TapStatement::Plan(crate::TapPlan {
@@ -778,7 +790,7 @@ mod test {
     fn single_sucess_num_only() {
         let document = "TAP version 14\n1..1\nok 1";
         let mut parser = TapParser::new();
-        assert_eq!(
+        assert_statements(
             parser.parse(document).unwrap(),
             vec![
                 TapStatement::Plan(crate::TapPlan {
@@ -800,7 +812,7 @@ mod test {
     fn single_sucess_num_bare_desc() {
         let document = "TAP version 14\n1..1\nok 1 this is a bare description - with a dash!";
         let mut parser = TapParser::new();
-        assert_eq!(
+        assert_statements(
             parser.parse(document).unwrap(),
             vec![
                 TapStatement::Plan(crate::TapPlan {
@@ -822,7 +834,7 @@ mod test {
     fn single_sucess_no_num_bare_desc() {
         let document = "TAP version 14\n1..1\nok this is a bare description - with a dash!";
         let mut parser = TapParser::new();
-        assert_eq!(
+        assert_statements(
             parser.parse(document).unwrap(),
             vec![
                 TapStatement::Plan(crate::TapPlan {
@@ -844,7 +856,7 @@ mod test {
     fn single_sucess_no_num_dash_desc() {
         let document = "TAP version 14\n1..1\nok - this is a dash description - with a dash!";
         let mut parser = TapParser::new();
-        assert_eq!(
+        assert_statements(
             parser.parse(document).unwrap(),
             vec![
                 TapStatement::Plan(crate::TapPlan {
@@ -866,7 +878,7 @@ mod test {
     fn sucess_fail_bare() {
         let document = "TAP version 14\n1..1\nok\nnot ok";
         let mut parser = TapParser::new();
-        assert_eq!(
+        assert_statements(
             parser.parse(document).unwrap(),
             vec![
                 TapStatement::Plan(crate::TapPlan {
