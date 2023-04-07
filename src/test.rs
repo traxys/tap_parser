@@ -437,6 +437,82 @@ make_test! {SUCCESS: single_sucess,
     ],
 }
 
+#[test]
+fn trailing_lines() {
+    let document = indoc! {"
+            TAP version 14
+            ok 1 - this is a success
+            1..1
+            These are trailing lines, and are such are ignored
+        "};
+    let mut parser = TapParser::new();
+
+    assert_statements(
+        parser.parse(document).unwrap(),
+        vec![
+            TapStatement::TestPoint(crate::TapTest {
+                result: true,
+                number: Some(1),
+                desc: Some("this is a success"),
+                directive: None,
+                yaml: Vec::new(),
+            }),
+            TapStatement::Plan(crate::TapPlan {
+                count: 1,
+                reason: None,
+            }),
+        ],
+    );
+}
+
+#[test]
+fn trailing_empty() {
+    let document = indoc! {"
+            TAP version 14
+            1..0
+            These are trailing lines, and are such are ignored
+        "};
+    let mut parser = TapParser::new();
+
+    assert_statements(
+        parser.parse(document).unwrap(),
+        vec![TapStatement::Plan(crate::TapPlan {
+            count: 0,
+            reason: None,
+        })],
+    );
+}
+
+#[test]
+fn trailing_lines_after_yaml() {
+    let document = indoc! {"
+            TAP version 14
+            1..1
+            ok 1 - this is a success
+              ---
+              ...
+            These are trailing lines, and are such are ignored
+        "};
+    let mut parser = TapParser::new();
+
+    assert_statements(
+        parser.parse(document).unwrap(),
+        vec![
+            TapStatement::Plan(crate::TapPlan {
+                count: 1,
+                reason: None,
+            }),
+            TapStatement::TestPoint(crate::TapTest {
+                result: true,
+                number: Some(1),
+                desc: Some("this is a success"),
+                directive: None,
+                yaml: Vec::new(),
+            }),
+        ],
+    );
+}
+
 make_test! {FAIL: empty_directive,
     indoc! {"
             TAP version 14
@@ -477,8 +553,8 @@ make_test! {FAIL: bail,
     indoc! {"
             TAP version 14
             1..1
-            ok 1 - desc
             Bail out! We wanted to
+            ok 1 - desc
         "},
     Error::Bailed("We wanted to".into()),
     vec![
@@ -486,20 +562,13 @@ make_test! {FAIL: bail,
             count: 1,
             reason: None,
         }),
-        TapStatement::TestPoint(crate::TapTest {
-            result: true,
-            number: Some(1),
-            desc: Some("desc"),
-            directive: None,
-            yaml: Vec::new(),
-        }),
     ],
 }
 
 make_test! {FAIL: yaml_after_yaml,
     indoc! {"
             TAP version 14
-            1..1
+            1..2
             not ok 1 - failure
               ---
               failure:
@@ -509,7 +578,7 @@ make_test! {FAIL: yaml_after_yaml,
         "},
     Error::InvalidYaml,
     vec![
-        TapStatement::Plan(crate::TapPlan{count: 1, reason: None}),
+        TapStatement::Plan(crate::TapPlan{count: 2, reason: None}),
         TapStatement::TestPoint(crate::TapTest{
             result: false,
             desc: Some("failure"),

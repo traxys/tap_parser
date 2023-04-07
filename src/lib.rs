@@ -1,7 +1,10 @@
 //! This crate is a parser for the [Test Anything Protocol](https://testanything.org).
 //!
 //! It handles all the TAP 14 features, including subtests. The main entrypoint is the [TapParser]
-//! structure
+//! structure.
+//!
+//! The parser will ignore trailing lines when it is sure it could not be in the TAP document
+//! anymore.
 //!
 //! # Example
 //!
@@ -111,6 +114,8 @@ pub struct TapParser<'a> {
     statements: Vec<TapStatement<'a>>,
     read_plan: bool,
     sub_parser: Option<SubTapParser<'a>>,
+    test_expected: Option<usize>,
+    test_seen: usize,
 }
 
 struct SubTapParser<'a> {
@@ -158,6 +163,8 @@ impl<'a> TapParser<'a> {
             read_plan: false,
             state: State::Body,
             sub_parser: None,
+            test_seen: 0,
+            test_expected: None,
         }
     }
 
@@ -244,6 +251,7 @@ impl<'a> TapParser<'a> {
                 self.in_body = true;
             }
 
+            self.test_expected = Some(count);
             self.read_plan = true;
 
             return Ok(());
@@ -280,6 +288,7 @@ impl<'a> TapParser<'a> {
 
                     self.statements.push(TapStatement::Subtest(sub_doc));
                     self.state = State::AfterTest;
+                    self.test_seen += 1;
 
                     Ok(())
                 } else if line.len() < 4 || &line[0..4] != "    " {
@@ -328,11 +337,13 @@ impl<'a> TapParser<'a> {
                     let test = self.read_test_line(true, test_point.trim())?;
                     self.state = State::AfterTest;
                     self.statements.push(TapStatement::TestPoint(test));
+                    self.test_seen += 1;
                     Ok(())
                 } else if let Some(test_point) = line.strip_prefix("not ok") {
                     let test = self.read_test_line(false, test_point.trim())?;
                     self.state = State::AfterTest;
                     self.statements.push(TapStatement::TestPoint(test));
+                    self.test_seen += 1;
                     Ok(())
                 } else if line == "  ---" {
                     Err(Error::InvalidYaml)
@@ -398,7 +409,9 @@ impl<'a> TapParser<'a> {
         }
 
         for line in lines {
-            if self.done {
+            if self.done
+                || (Some(self.test_seen) == self.test_expected && matches!(self.state, State::Body))
+            {
                 break;
             }
 
@@ -420,4 +433,4 @@ impl<'a> Default for TapParser<'a> {
 }
 
 #[cfg(test)]
-mod test; 
+mod test;
