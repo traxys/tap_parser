@@ -282,8 +282,13 @@ impl<'a> TapParser<'a> {
                         expected: 4,
                         line: line.to_string(),
                     })
+                } else if let Some(v) = line.strip_prefix("    TAP version") {
+                    if v.trim() == "14" {
+                        Ok(())
+                    } else {
+                        Err(Error::InvalidVersion(v.trim().into()))
+                    }
                 } else {
-                    dbg!(&line);
                     self.sub_parser
                         .as_mut()
                         .unwrap()
