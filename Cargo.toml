@@ -1,6 +1,8 @@
 [package]
 name = "tap_parser"
 version = "0.1.0"
+description = "A library to parse TAP outputs"
+repository = "https://github.com/traxys/tap_parser"
 authors = ["traxys <quentin@familleboyer.net>"]
 edition = "2021"
 license = "MIT"
