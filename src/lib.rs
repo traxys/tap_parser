@@ -206,17 +206,18 @@ impl<'a> TapParser<'a> {
                 return Err(Error::MalformedDirective(directive_str.into()));
             }
 
-            let directive_kind = directive_str[..4].to_lowercase();
+            let directive_kind = directive_str.as_bytes()[..4].to_ascii_lowercase();
+
+            let kind = match directive_kind.as_slice() {
+                b"skip" => DirectiveKind::Skip,
+                b"todo" => DirectiveKind::Todo,
+                _ => return Err(Error::MalformedDirective(directive_str.into())),
+            };
+
             let reason = if directive_str.len() == 4 {
                 None
             } else {
                 Some(directive_str[4..].trim())
-            };
-
-            let kind = match directive_kind.as_str() {
-                "skip" => DirectiveKind::Skip,
-                "todo" => DirectiveKind::Todo,
-                _ => return Err(Error::MalformedDirective(directive_str.into())),
             };
 
             directive = Some(TapDirective { kind, reason });
@@ -263,7 +264,7 @@ impl<'a> TapParser<'a> {
                 Ok(())
             }
             State::Subtest => {
-                if line.len() >= 9 && line[0..9].to_lowercase() == "bail out!" {
+                if line.len() >= 9 && line.as_bytes()[0..9].to_ascii_lowercase() == b"bail out!" {
                     Err(Error::Bailed(line[9..].trim().to_string()))
                 } else if line.starts_with("ok") || line.starts_with("not ok") {
                     let sub_parser = self.sub_parser.take().unwrap();
@@ -291,7 +292,7 @@ impl<'a> TapParser<'a> {
                     self.test_seen += 1;
 
                     Ok(())
-                } else if line.len() < 4 || &line[0..4] != "    " {
+                } else if line.len() < 4 || &line.as_bytes()[0..4] != b"    " {
                     Err(Error::Misindent {
                         expected: 4,
                         line: line.to_string(),
@@ -316,7 +317,8 @@ impl<'a> TapParser<'a> {
                 }
 
                 if line.starts_with("    ")
-                    || (line.len() >= 9 && line[0..9].to_lowercase() == "# subtest")
+                    || (line.len() >= 9
+                        && line.as_bytes()[0..9].to_ascii_lowercase() == b"# subtest")
                 {
                     self.state = State::Subtest;
                     let name = if line.starts_with('#') {
@@ -349,7 +351,9 @@ impl<'a> TapParser<'a> {
                     Err(Error::InvalidYaml)
                 } else if line == "  ..." {
                     Err(Error::InvalidYamlClose)
-                } else if line.len() >= 9 && line[0..9].to_lowercase() == "bail out!" {
+                } else if line.len() >= 9
+                    && line.as_bytes()[0..9].to_ascii_lowercase() == b"bail out!"
+                {
                     Err(Error::Bailed(line[9..].trim().to_string()))
                 } else if let Some(comment) = line.strip_prefix('#') {
                     self.statements.push(TapStatement::Comment(comment.trim()));
@@ -366,7 +370,7 @@ impl<'a> TapParser<'a> {
                         std::mem::take(&mut self.yaml_accumulator);
                     self.state = State::Body;
                     Ok(())
-                } else if line.len() < 2 || &line[..2] != "  " {
+                } else if line.len() < 2 || &line.as_bytes()[..2] != b"  " {
                     Err(Error::Misindent {
                         expected: 2,
                         line: line.to_string(),
