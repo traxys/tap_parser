@@ -75,9 +75,9 @@ pub struct TapTest<'a> {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(PartialEq, Eq, Debug)]
 pub struct TapSubDocument<'a> {
-    name: Option<&'a str>,
-    statements: Vec<TapStatement<'a>>,
-    ending: TapTest<'a>,
+    pub name: Option<&'a str>,
+    pub statements: Vec<TapStatement<'a>>,
+    pub ending: TapTest<'a>,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
