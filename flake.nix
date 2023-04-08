@@ -4,6 +4,7 @@
   inputs.flake-utils.url = "github:numtide/flake-utils";
   inputs.naersk.url = "github:nix-community/naersk";
   inputs.rust-overlay.url = "github:oxalica/rust-overlay";
+  inputs.pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
 
   outputs = {
     self,
@@ -11,6 +12,7 @@
     flake-utils,
     naersk,
     rust-overlay,
+    pre-commit-hooks,
   }:
     flake-utils.lib.eachDefaultSystem (system: let
       pkgs = import nixpkgs {
@@ -29,12 +31,20 @@
         exec "${pkgs.cargo-fuzz}/bin/cargo-fuzz" "$@"
       '';
     in {
+      checks = {
+        pre-commit-check = pre-commit-hooks.lib.${system}.run {
+          src = ./.;
+          hooks = {
+            rustfmt.enable = true;
+          };
+        };
+      };
+
       devShell = pkgs.mkShell {
+        inherit (self.checks.${system}.pre-commit-check) shellHook;
+
         nativeBuildInputs = [rust pkgs.cargo-tarpaulin cargo-fuzz-wrapped];
         RUST_PATH = "${rust}";
-        shellHook = ''
-          alias rstddoc="firefox ${rust}/share/doc/rust/html/std/index.html"
-        '';
       };
 
       defaultPackage = naersk'.buildPackage ./.;
