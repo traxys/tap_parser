@@ -3,6 +3,7 @@ name = "tap_parser"
 version = "0.1.0"
 authors = ["traxys <quentin@familleboyer.net>"]
 edition = "2021"
+license = "MIT"
 
 [dependencies]
 serde = { version = "1.0.159", features = ["derive"], optional = true }
