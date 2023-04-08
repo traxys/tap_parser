@@ -357,6 +357,7 @@ impl<'a> TapParser<'a> {
                     Err(Error::Bailed(line[9..].trim().to_string()))
                 } else if let Some(comment) = line.strip_prefix('#') {
                     self.statements.push(TapStatement::Comment(comment.trim()));
+                    self.state = State::Body;
                     Ok(())
                 } else if line.trim().is_empty() || line.starts_with("pragma ") {
                     Ok(())
