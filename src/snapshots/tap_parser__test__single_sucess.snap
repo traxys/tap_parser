@@ -1,0 +1,14 @@
+---
+source: src/test.rs
+expression: "parser.parse(indoc! {\n                \"\n            TAP version 14\n            1..1\n            ok 1 - this is a success\n        \"\n            }).unwrap()"
+---
+- Plan:
+    count: 1
+    reason: ~
+- TestPoint:
+    result: true
+    number: 1
+    desc: this is a success
+    directive: ~
+    yaml: []
+

@@ -1,0 +1,8 @@
+---
+source: src/test.rs
+expression: "parser.parse(indoc! {\n                \"\n            TAP version 14\n            1..0 # no tests to run\n        \"\n            }).unwrap()"
+---
+- Plan:
+    count: 0
+    reason: no tests to run
+

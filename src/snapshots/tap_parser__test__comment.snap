@@ -1,0 +1,9 @@
+---
+source: src/test.rs
+expression: "parser.parse(indoc! {\n                \"\n            TAP version 14\n            1..1\n            #   This is a comment\n        \"\n            }).unwrap()"
+---
+- Plan:
+    count: 1
+    reason: ~
+- Comment: This is a comment
+

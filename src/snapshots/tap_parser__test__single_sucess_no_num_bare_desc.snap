@@ -1,0 +1,14 @@
+---
+source: src/test.rs
+expression: "parser.parse(indoc! {\n                \"\n            TAP version 14\n            1..1\n            ok this is a bare description - with a dash!\n        \"\n            }).unwrap()"
+---
+- Plan:
+    count: 1
+    reason: ~
+- TestPoint:
+    result: true
+    number: ~
+    desc: this is a bare description - with a dash!
+    directive: ~
+    yaml: []
+

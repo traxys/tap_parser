@@ -1,0 +1,21 @@
+---
+source: src/test.rs
+expression: parser.parse(&nested_doc).unwrap()
+---
+- Plan:
+    count: 1
+    reason: ~
+- Subtest:
+    name: inner
+    statements:
+      - Plan:
+          count: 1
+          reason: ~
+      - Comment: This is a comment
+    ending:
+      result: true
+      number: 1
+      desc: inner
+      directive: ~
+      yaml: []
+

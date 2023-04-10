@@ -1,0 +1,16 @@
+---
+source: src/test.rs
+expression: "parser.parse(indoc! {\n                \"\n            TAP version 14\n            1..1\n            not ok 1 - failure\n              ---\n              failure:\n                 - why not\n              ...\n        \"\n            }).unwrap()"
+---
+- Plan:
+    count: 1
+    reason: ~
+- TestPoint:
+    result: false
+    number: 1
+    desc: failure
+    directive: ~
+    yaml:
+      - "failure:"
+      - "   - why not"
+

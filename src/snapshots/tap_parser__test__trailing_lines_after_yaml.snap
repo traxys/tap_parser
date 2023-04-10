@@ -1,0 +1,14 @@
+---
+source: src/test.rs
+expression: parser.parse(document).unwrap()
+---
+- Plan:
+    count: 1
+    reason: ~
+- TestPoint:
+    result: true
+    number: 1
+    desc: this is a success
+    directive: ~
+    yaml: []
+

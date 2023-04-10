@@ -1,0 +1,8 @@
+---
+source: src/test.rs
+expression: parser.statements()
+---
+- Plan:
+    count: 1
+    reason: ~
+

@@ -1,0 +1,16 @@
+---
+source: src/test.rs
+expression: parser.statements()
+---
+- Plan:
+    count: 2
+    reason: ~
+- TestPoint:
+    result: false
+    number: 1
+    desc: failure
+    directive: ~
+    yaml:
+      - "failure:"
+      - "   - why not"
+

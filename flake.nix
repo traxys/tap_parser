@@ -43,7 +43,7 @@
       devShell = pkgs.mkShell {
         inherit (self.checks.${system}.pre-commit-check) shellHook;
 
-        nativeBuildInputs = [rust pkgs.cargo-tarpaulin cargo-fuzz-wrapped];
+        nativeBuildInputs = [rust pkgs.cargo-tarpaulin cargo-fuzz-wrapped pkgs.cargo-insta];
         RUST_PATH = "${rust}";
       };
 

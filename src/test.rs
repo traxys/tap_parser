@@ -1,31 +1,40 @@
-use crate::{Error, TapParser, TapStatement, TapTest};
+use crate::{Error, TapParser};
 use indoc::indoc;
 use paste::paste;
 
-fn assert_statements(body: Vec<TapStatement>, expected: Vec<TapStatement>) {
-    body.iter()
-        .zip(&expected)
-        .enumerate()
-        .for_each(|(i, (b, e))| {
-            if b != e {
-                panic!("Statement {i} differs, expected: {b:#?}\ngot: {e:#?}");
+#[allow(unused_macros)]
+macro_rules! compile_warning {
+    (
+    $name:ident, $message:expr $(,)*
+) => {
+        mod $name {
+            #[must_use = $message]
+            struct CompileWarning;
+            #[allow(dead_code, path_statements)]
+            fn trigger_warning() {
+                CompileWarning;
             }
-        });
-
-    if body.len() != expected.len() {
-        panic!("Statement length differ: expected: {expected:#?}\ngot: {body:#?}")
-    }
+        }
+    };
 }
 
+#[cfg(not(feature = "serde"))]
+compile_warning!(
+    serde,
+    "You should enable the `serde` feature to run all tests"
+);
+
 macro_rules! make_test {
-    (SUCCESS: $name:ident, $document:expr, $expected:expr $(,)?) => {
+    (SUCCESS: $name:ident, $document:expr $(,)?) => {
+        #[cfg(feature = "serde")]
         #[test]
         fn $name() {
             let mut parser = TapParser::new();
-            assert_statements(parser.parse($document).unwrap(), $expected);
+            insta::assert_yaml_snapshot!(parser.parse($document).unwrap());
         }
 
         paste! {
+            #[cfg(feature = "serde")]
             #[test]
             fn [< $name _as_subtest >]() {
                 let mut nested_doc = indoc! {"
@@ -41,32 +50,21 @@ macro_rules! make_test {
                 }
                 nested_doc += "ok 1 - inner\n";
                 let mut parser = TapParser::new();
-                assert_statements(parser.parse(&nested_doc).unwrap(), vec![
-                    TapStatement::Plan(crate::TapPlan{count: 1, reason: None}),
-                    TapStatement::Subtest(crate::TapSubDocument{
-                        name: Some("inner"),
-                        statements: $expected,
-                        ending: TapTest {
-                            desc: Some("inner"),
-                            directive: None,
-                            yaml: Vec::new(),
-                            number: Some(1),
-                            result: true,
-                        },
-                    })
-                ]);
+                insta::assert_yaml_snapshot!(parser.parse(&nested_doc).unwrap());
             }
         }
     };
-    (FAIL: $name:ident, $document:expr, $error:expr, $parsed:expr $(,)?) => {
+    (FAIL: $name:ident, $document:expr, $error:expr, $(,)?) => {
+        #[cfg(feature = "serde")]
         #[test]
         fn $name() {
             let mut parser = TapParser::new();
             assert_eq!(parser.parse($document), Err($error));
-            assert_statements(parser.statements(), $parsed);
+            insta::assert_yaml_snapshot!(parser.statements());
         }
 
         paste! {
+            #[cfg(feature = "serde")]
             #[test]
             fn [< $name _as_subtest >]() {
                 let mut nested_doc = indoc! {"
@@ -84,22 +82,7 @@ macro_rules! make_test {
                 let mut parser = TapParser::new();
                 println!("Document: {nested_doc}");
                 assert_eq!(parser.parse(&nested_doc), Err($error));
-                assert_statements(parser.statements(), vec![
-                    TapStatement::Plan(crate::TapPlan{count: 1, reason: None}),
-                    // TODO: provide *some* output of subtests in cases of errors
-                    //
-                    // TapStatement::Subtest(crate::TapSubDocument{
-                    //     name: Some("inner"),
-                    //     statements: $parsed,
-                    //     ending: TapTest {
-                    //         desc: Some("inner"),
-                    //         directive: None,
-                    //         yaml: Vec::new(),
-                    //         number: Some(1),
-                    //         result: true,
-                    //     },
-                    // })
-                ]);
+                insta::assert_yaml_snapshot!(parser.statements());
             }
         }
     };
@@ -109,11 +92,7 @@ make_test! {SUCCESS: empty,
     indoc! {"
             TAP version 14
             1..0
-        "},
-    vec![TapStatement::Plan(crate::TapPlan {
-        count: 0,
-        reason: None,
-    })],
+    "}
 }
 
 make_test! {SUCCESS: pragma,
@@ -121,11 +100,7 @@ make_test! {SUCCESS: pragma,
             TAP version 14
             1..1
             pragma +strict
-        "},
-    vec![TapStatement::Plan(crate::TapPlan {
-        count: 1,
-        reason: None,
-    })],
+    "},
 }
 
 make_test! {FAIL: anything_line,
@@ -133,12 +108,8 @@ make_test! {FAIL: anything_line,
             TAP version 14
             1..1
             this is clearly not a valid line
-        "},
+    "},
     Error::UnknownLine("this is clearly not a valid line".into()),
-    vec![TapStatement::Plan(crate::TapPlan {
-        count: 1,
-        reason: None,
-    })],
 }
 
 make_test! {FAIL: duplicate_plan,
@@ -146,12 +117,8 @@ make_test! {FAIL: duplicate_plan,
             TAP version 14
             1..1
             1..1
-        "},
+    "},
     Error::DuplicatedPlan,
-    vec![TapStatement::Plan(crate::TapPlan {
-        count: 1,
-        reason: None,
-    })],
 }
 
 make_test! {SUCCESS: escape_pound,
@@ -159,23 +126,7 @@ make_test! {SUCCESS: escape_pound,
             TAP version 14
             1..1
             ok 1 - test with \# escaped \\ chars # SKIP
-        "#},
-    vec![
-        TapStatement::Plan(crate::TapPlan {
-            count: 1,
-            reason: None,
-        }),
-        TapStatement::TestPoint(crate::TapTest {
-            result: true,
-            number: Some(1),
-            desc: Some(r#"test with \# escaped \\ chars"#),
-            directive: Some(crate::TapDirective {
-                kind: crate::DirectiveKind::Skip,
-                reason: None,
-            }),
-            yaml: Vec::new(),
-        }),
-    ]
+    "#},
 }
 
 make_test! {FAIL: subtest_bail,
@@ -185,14 +136,8 @@ make_test! {FAIL: subtest_bail,
             # Subtest: subtest
                 ok 1 - inside subtest
             Bail out! Doing a subtest
-        "},
+    "},
     Error::Bailed("Doing a subtest".into()),
-    vec![
-        TapStatement::Plan(crate::TapPlan {
-            count: 1,
-            reason: None,
-        }),
-    ],
 }
 
 make_test! {FAIL: subtest_eod,
@@ -201,14 +146,8 @@ make_test! {FAIL: subtest_eod,
             1..1
             # Subtest: subtest
             ok 1 - out of the subtest
-        "},
+    "},
     Error::UnexpectedEOD,
-    vec![
-        TapStatement::Plan(crate::TapPlan {
-            count: 1,
-            reason: None,
-        }),
-    ],
 }
 
 make_test! {FAIL: subtest_misindent,
@@ -218,14 +157,8 @@ make_test! {FAIL: subtest_misindent,
             # Subtest: subtest
                ok 1 - with three spaces
             ok 1 - subtest
-        "},
+    "},
     Error::Misindent { expected: 4, line: "   ok 1 - with three spaces".into() },
-    vec![
-        TapStatement::Plan(crate::TapPlan {
-            count: 1,
-            reason: None,
-        }),
-    ],
 }
 
 make_test! {SUCCESS: subtest_yaml,
@@ -239,36 +172,7 @@ make_test! {SUCCESS: subtest_yaml,
               ---
               yaml_in_subtest
               ...
-        "},
-    vec![
-        TapStatement::Plan(crate::TapPlan {
-            count: 1,
-            reason: None,
-        }),
-        TapStatement::Subtest(crate::TapSubDocument {
-            name: Some("subtest"),
-            statements: vec![
-                TapStatement::TestPoint(TapTest {
-                    result: true,
-                    directive: None,
-                    desc: Some("inside subtest"),
-                    yaml: Vec::new(),
-                    number: Some(1),
-                }),
-                TapStatement::Plan(crate::TapPlan {
-                    count: 1,
-                    reason: None,
-                }),
-            ],
-            ending: crate::TapTest {
-                result: true,
-                number: Some(1),
-                desc: Some("subtest"),
-                directive: None,
-                yaml: vec!["yaml_in_subtest"],
-            },
-        }),
-    ],
+    "},
 }
 
 make_test! {SUCCESS: subtest_with_name,
@@ -279,36 +183,7 @@ make_test! {SUCCESS: subtest_with_name,
                 ok 1 - inside subtest
                 1..1
             ok 1 - subtest
-        "},
-    vec![
-        TapStatement::Plan(crate::TapPlan {
-            count: 1,
-            reason: None,
-        }),
-        TapStatement::Subtest(crate::TapSubDocument {
-            name: Some("subtest"),
-            statements: vec![
-                TapStatement::TestPoint(TapTest {
-                    result: true,
-                    directive: None,
-                    desc: Some("inside subtest"),
-                    yaml: Vec::new(),
-                    number: Some(1),
-                }),
-                TapStatement::Plan(crate::TapPlan {
-                    count: 1,
-                    reason: None,
-                }),
-            ],
-            ending: crate::TapTest {
-                result: true,
-                number: Some(1),
-                desc: Some("subtest"),
-                directive: None,
-                yaml: Vec::new(),
-            },
-        }),
-    ],
+    "},
 }
 
 make_test! {SUCCESS: subtest_header,
@@ -319,36 +194,7 @@ make_test! {SUCCESS: subtest_header,
                 ok 1 - inside subtest
                 1..1
             ok 1 - subtest
-        "},
-    vec![
-        TapStatement::Plan(crate::TapPlan {
-            count: 1,
-            reason: None,
-        }),
-        TapStatement::Subtest(crate::TapSubDocument {
-            name: None,
-            statements: vec![
-                TapStatement::TestPoint(TapTest {
-                    result: true,
-                    directive: None,
-                    desc: Some("inside subtest"),
-                    yaml: Vec::new(),
-                    number: Some(1),
-                }),
-                TapStatement::Plan(crate::TapPlan {
-                    count: 1,
-                    reason: None,
-                }),
-            ],
-            ending: crate::TapTest {
-                result: true,
-                number: Some(1),
-                desc: Some("subtest"),
-                directive: None,
-                yaml: Vec::new(),
-            },
-        }),
-    ],
+    "},
 }
 
 make_test! {SUCCESS: subtest_bare,
@@ -358,47 +204,14 @@ make_test! {SUCCESS: subtest_bare,
                 ok 1 - inside subtest
                 1..1
             ok 1 - subtest
-        "},
-    vec![
-        TapStatement::Plan(crate::TapPlan {
-            count: 1,
-            reason: None,
-        }),
-        TapStatement::Subtest(crate::TapSubDocument {
-            name: None,
-            statements: vec![
-                TapStatement::TestPoint(TapTest {
-                    result: true,
-                    directive: None,
-                    desc: Some("inside subtest"),
-                    yaml: Vec::new(),
-                    number: Some(1),
-                }),
-                TapStatement::Plan(crate::TapPlan {
-                    count: 1,
-                    reason: None,
-                }),
-            ],
-            ending: crate::TapTest {
-                result: true,
-                number: Some(1),
-                desc: Some("subtest"),
-                directive: None,
-                yaml: Vec::new(),
-            },
-        }),
-    ],
+    "},
 }
 
 make_test! {SUCCESS: empty_with_reason,
     indoc! {"
             TAP version 14
             1..0 # no tests to run
-        "},
-    vec![TapStatement::Plan(crate::TapPlan {
-        count: 0,
-        reason: Some("no tests to run"),
-    })],
+    "},
 }
 
 make_test! {SUCCESS: comment,
@@ -406,14 +219,7 @@ make_test! {SUCCESS: comment,
             TAP version 14
             1..1
             #   This is a comment
-        "},
-    vec![
-        TapStatement::Plan(crate::TapPlan {
-            count: 1,
-            reason: None,
-        }),
-        TapStatement::Comment("This is a comment"),
-    ],
+    "},
 }
 
 make_test! {SUCCESS: single_sucess,
@@ -421,22 +227,10 @@ make_test! {SUCCESS: single_sucess,
             TAP version 14
             1..1
             ok 1 - this is a success
-        "},
-    vec![
-        TapStatement::Plan(crate::TapPlan {
-            count: 1,
-            reason: None,
-        }),
-        TapStatement::TestPoint(crate::TapTest {
-            result: true,
-            number: Some(1),
-            desc: Some("this is a success"),
-            directive: None,
-            yaml: Vec::new(),
-        }),
-    ],
+    "},
 }
 
+#[cfg(feature = "serde")]
 #[test]
 fn trailing_lines() {
     let document = indoc! {"
@@ -444,45 +238,26 @@ fn trailing_lines() {
             ok 1 - this is a success
             1..1
             These are trailing lines, and are such are ignored
-        "};
+    "};
     let mut parser = TapParser::new();
 
-    assert_statements(
-        parser.parse(document).unwrap(),
-        vec![
-            TapStatement::TestPoint(crate::TapTest {
-                result: true,
-                number: Some(1),
-                desc: Some("this is a success"),
-                directive: None,
-                yaml: Vec::new(),
-            }),
-            TapStatement::Plan(crate::TapPlan {
-                count: 1,
-                reason: None,
-            }),
-        ],
-    );
+    insta::assert_yaml_snapshot!(parser.parse(document).unwrap())
 }
 
+#[cfg(feature = "serde")]
 #[test]
 fn trailing_empty() {
     let document = indoc! {"
             TAP version 14
             1..0
             These are trailing lines, and are such are ignored
-        "};
+    "};
     let mut parser = TapParser::new();
 
-    assert_statements(
-        parser.parse(document).unwrap(),
-        vec![TapStatement::Plan(crate::TapPlan {
-            count: 0,
-            reason: None,
-        })],
-    );
+    insta::assert_yaml_snapshot!(parser.parse(document).unwrap())
 }
 
+#[cfg(feature = "serde")]
 #[test]
 fn trailing_lines_after_yaml() {
     let document = indoc! {"
@@ -492,25 +267,10 @@ fn trailing_lines_after_yaml() {
               ---
               ...
             These are trailing lines, and are such are ignored
-        "};
+    "};
     let mut parser = TapParser::new();
 
-    assert_statements(
-        parser.parse(document).unwrap(),
-        vec![
-            TapStatement::Plan(crate::TapPlan {
-                count: 1,
-                reason: None,
-            }),
-            TapStatement::TestPoint(crate::TapTest {
-                result: true,
-                number: Some(1),
-                desc: Some("this is a success"),
-                directive: None,
-                yaml: Vec::new(),
-            }),
-        ],
-    );
+    insta::assert_yaml_snapshot!(parser.parse(document).unwrap())
 }
 
 make_test! {FAIL: empty_directive,
@@ -518,9 +278,8 @@ make_test! {FAIL: empty_directive,
             TAP version 14
             1..1
             ok 1 - desc #
-        "},
+    "},
     Error::MalformedDirective("".into()),
-    vec![TapStatement::Plan(crate::TapPlan{count: 1, reason: None})],
 }
 
 make_test! {FAIL: misindented_yaml,
@@ -532,21 +291,11 @@ make_test! {FAIL: misindented_yaml,
              failure:
                  - why not
               ...
-        "},
+    "},
     Error::Misindent {
         expected: 2,
         line: " failure:".into()
     },
-    vec![
-        TapStatement::Plan(crate::TapPlan{count: 1, reason: None}),
-        TapStatement::TestPoint(crate::TapTest{
-            result: false,
-            desc: Some("failure"),
-            number: Some(1),
-            directive: None,
-            yaml: Vec::new(),
-        }),
-    ],
 }
 
 make_test! {FAIL: bail,
@@ -555,14 +304,8 @@ make_test! {FAIL: bail,
             1..1
             Bail out! We wanted to
             ok 1 - desc
-        "},
+    "},
     Error::Bailed("We wanted to".into()),
-    vec![
-        TapStatement::Plan(crate::TapPlan {
-            count: 1,
-            reason: None,
-        }),
-    ],
 }
 
 make_test! {FAIL: yaml_after_yaml,
@@ -575,21 +318,8 @@ make_test! {FAIL: yaml_after_yaml,
                  - why not
               ...
               ---
-        "},
+    "},
     Error::InvalidYaml,
-    vec![
-        TapStatement::Plan(crate::TapPlan{count: 2, reason: None}),
-        TapStatement::TestPoint(crate::TapTest{
-            result: false,
-            desc: Some("failure"),
-            number: Some(1),
-            directive: None,
-            yaml: vec![
-                "failure:",
-                "   - why not",
-            ],
-        }),
-    ],
 }
 
 make_test! {FAIL: yaml_close_only,
@@ -598,18 +328,8 @@ make_test! {FAIL: yaml_close_only,
             1..1
             not ok 1 - failure
               ...
-        "},
+    "},
     Error::InvalidYamlClose,
-    vec![
-        TapStatement::Plan(crate::TapPlan{count: 1, reason: None}),
-        TapStatement::TestPoint(crate::TapTest{
-            result: false,
-            desc: Some("failure"),
-            number: Some(1),
-            directive: None,
-            yaml: Vec::new(),
-        }),
-    ],
 }
 
 make_test! {SUCCESS: single_failure_yaml,
@@ -621,20 +341,7 @@ make_test! {SUCCESS: single_failure_yaml,
               failure:
                  - why not
               ...
-        "},
-    vec![
-        TapStatement::Plan(crate::TapPlan {
-            count: 1,
-            reason: None,
-        }),
-        TapStatement::TestPoint(crate::TapTest {
-            result: false,
-            number: Some(1),
-            desc: Some("failure"),
-            directive: None,
-            yaml: vec!["failure:", "   - why not"],
-        }),
-    ],
+    "},
 }
 
 make_test! {SUCCESS: single_sucess_skip,
@@ -642,23 +349,7 @@ make_test! {SUCCESS: single_sucess_skip,
             TAP version 14
             1..1
             ok 1 - desc # SKIP
-        "},
-    vec![
-        TapStatement::Plan(crate::TapPlan {
-            count: 1,
-            reason: None,
-        }),
-        TapStatement::TestPoint(crate::TapTest {
-            result: true,
-            number: Some(1),
-            desc: Some("desc"),
-            directive: Some(crate::TapDirective {
-                kind: crate::DirectiveKind::Skip,
-                reason: None,
-            }),
-            yaml: Vec::new(),
-        }),
-    ],
+    "},
 }
 
 make_test! {SUCCESS: single_sucess_todo,
@@ -666,23 +357,7 @@ make_test! {SUCCESS: single_sucess_todo,
             TAP version 14
             1..1
             ok 1 - desc # TODO
-        "},
-    vec![
-        TapStatement::Plan(crate::TapPlan {
-            count: 1,
-            reason: None,
-        }),
-        TapStatement::TestPoint(crate::TapTest {
-            result: true,
-            number: Some(1),
-            desc: Some("desc"),
-            directive: Some(crate::TapDirective {
-                kind: crate::DirectiveKind::Todo,
-                reason: None,
-            }),
-            yaml: Vec::new(),
-        }),
-    ],
+    "},
 }
 
 make_test! {FAIL: malformed_directive,
@@ -690,14 +365,8 @@ make_test! {FAIL: malformed_directive,
             TAP version 14
             1..1
             ok 1 - desc # INVALID
-        "},
+    "},
     Error::MalformedDirective("INVALID".into()),
-    vec![
-        TapStatement::Plan(crate::TapPlan {
-            count: 1,
-            reason: None,
-        }),
-    ],
 }
 
 make_test! {FAIL: malformed_directive_too_short,
@@ -705,14 +374,8 @@ make_test! {FAIL: malformed_directive_too_short,
             TAP version 14
             1..1
             ok 1 - desc # SML
-        "},
+    "},
     Error::MalformedDirective("SML".into()),
-    vec![
-        TapStatement::Plan(crate::TapPlan {
-            count: 1,
-            reason: None,
-        }),
-    ],
 }
 
 make_test! {SUCCESS: single_sucess_skip_reason,
@@ -720,23 +383,7 @@ make_test! {SUCCESS: single_sucess_skip_reason,
             TAP version 14
             1..1
             ok 1 - desc # SKIP  has no power
-        "},
-    vec![
-        TapStatement::Plan(crate::TapPlan {
-            count: 1,
-            reason: None,
-        }),
-        TapStatement::TestPoint(crate::TapTest {
-            result: true,
-            number: Some(1),
-            desc: Some("desc"),
-            directive: Some(crate::TapDirective {
-                kind: crate::DirectiveKind::Skip,
-                reason: Some("has no power"),
-            }),
-            yaml: Vec::new(),
-        }),
-    ],
+    "},
 }
 
 make_test! {SUCCESS: single_sucess_skip_mixed_case,
@@ -744,23 +391,7 @@ make_test! {SUCCESS: single_sucess_skip_mixed_case,
             TAP version 14
             1..1
             ok 1 - desc # sKiP
-        "},
-    vec![
-        TapStatement::Plan(crate::TapPlan {
-            count: 1,
-            reason: None,
-        }),
-        TapStatement::TestPoint(crate::TapTest {
-            result: true,
-            number: Some(1),
-            desc: Some("desc"),
-            directive: Some(crate::TapDirective {
-                kind: crate::DirectiveKind::Skip,
-                reason: None,
-            }),
-            yaml: Vec::new(),
-        }),
-    ],
+    "},
 }
 
 make_test! {SUCCESS: single_sucess_bare,
@@ -768,20 +399,7 @@ make_test! {SUCCESS: single_sucess_bare,
             TAP version 14
             1..1
             ok
-        "},
-    vec![
-        TapStatement::Plan(crate::TapPlan {
-            count: 1,
-            reason: None,
-        }),
-        TapStatement::TestPoint(crate::TapTest {
-            result: true,
-            number: None,
-            desc: None,
-            directive: None,
-            yaml: Vec::new(),
-        }),
-    ],
+    "},
 }
 
 make_test! {SUCCESS: single_sucess_num_only,
@@ -789,20 +407,7 @@ make_test! {SUCCESS: single_sucess_num_only,
             TAP version 14
             1..1
             ok 1
-        "},
-    vec![
-        TapStatement::Plan(crate::TapPlan {
-            count: 1,
-            reason: None,
-        }),
-        TapStatement::TestPoint(crate::TapTest {
-            result: true,
-            number: Some(1),
-            desc: None,
-            directive: None,
-            yaml: Vec::new(),
-        }),
-    ],
+    "},
 }
 
 make_test! {SUCCESS: single_sucess_num_bare_desc,
@@ -810,20 +415,7 @@ make_test! {SUCCESS: single_sucess_num_bare_desc,
             TAP version 14
             1..1
             ok 1 this is a bare description - with a dash!
-        "},
-    vec![
-        TapStatement::Plan(crate::TapPlan {
-            count: 1,
-            reason: None,
-        }),
-        TapStatement::TestPoint(crate::TapTest {
-            result: true,
-            number: Some(1),
-            desc: Some("this is a bare description - with a dash!"),
-            directive: None,
-            yaml: Vec::new(),
-        }),
-    ],
+    "},
 }
 
 make_test! {SUCCESS: single_sucess_no_num_bare_desc,
@@ -831,20 +423,7 @@ make_test! {SUCCESS: single_sucess_no_num_bare_desc,
             TAP version 14
             1..1
             ok this is a bare description - with a dash!
-        "},
-    vec![
-        TapStatement::Plan(crate::TapPlan {
-            count: 1,
-            reason: None,
-        }),
-        TapStatement::TestPoint(crate::TapTest {
-            result: true,
-            number: None,
-            desc: Some("this is a bare description - with a dash!"),
-            directive: None,
-            yaml: Vec::new(),
-        }),
-    ],
+    "},
 }
 
 make_test! {SUCCESS: single_sucess_no_num_dash_desc,
@@ -852,20 +431,7 @@ make_test! {SUCCESS: single_sucess_no_num_dash_desc,
             TAP version 14
             1..1
             ok - this is a dash description - with a dash!
-        "},
-    vec![
-        TapStatement::Plan(crate::TapPlan {
-            count: 1,
-            reason: None,
-        }),
-        TapStatement::TestPoint(crate::TapTest {
-            result: true,
-            number: None,
-            desc: Some("this is a dash description - with a dash!"),
-            directive: None,
-            yaml: Vec::new(),
-        }),
-    ],
+    "},
 }
 
 make_test! {SUCCESS: plan_at_the_end,
@@ -873,20 +439,7 @@ make_test! {SUCCESS: plan_at_the_end,
             TAP version 14
             ok - this is a dash description - with a dash!
             1..1
-        "},
-    vec![
-        TapStatement::TestPoint(crate::TapTest {
-            result: true,
-            number: None,
-            desc: Some("this is a dash description - with a dash!"),
-            directive: None,
-            yaml: Vec::new(),
-        }),
-        TapStatement::Plan(crate::TapPlan {
-            count: 1,
-            reason: None,
-        }),
-    ],
+    "},
 }
 
 make_test! {SUCCESS: sucess_fail_bare,
@@ -895,72 +448,48 @@ make_test! {SUCCESS: sucess_fail_bare,
             1..1
             ok
             not ok
-        "},
-    vec![
-        TapStatement::Plan(crate::TapPlan {
-            count: 1,
-            reason: None,
-        }),
-        TapStatement::TestPoint(crate::TapTest {
-            result: true,
-            number: None,
-            desc: None,
-            directive: None,
-            yaml: Vec::new(),
-        }),
-        TapStatement::TestPoint(crate::TapTest {
-            result: false,
-            number: None,
-            desc: None,
-            directive: None,
-            yaml: Vec::new(),
-        }),
-    ],
+    "},
 }
 
 #[test]
 fn no_version() {
     let document = indoc! {"
             1..0
-        "};
+    "};
     let mut parser = TapParser::new();
     assert_eq!(parser.parse(document), Err(crate::Error::NoVersion))
 }
 
+#[cfg(feature = "serde")]
 #[test]
 fn eod() {
     let mut parser = TapParser::new();
     assert_eq!(parser.parse("TAP version 14"), Err(Error::UnexpectedEOD));
-    assert_statements(parser.statements(), vec![]);
+    insta::assert_yaml_snapshot!(parser.statements());
 }
 
+#[cfg(feature = "serde")]
 #[test]
 fn empty_input() {
     let mut parser = TapParser::new();
     assert_eq!(parser.parse(""), Err(Error::NoVersion));
-    assert_statements(parser.statements(), vec![]);
+    insta::assert_yaml_snapshot!(parser.statements());
 }
 
+#[cfg(feature = "serde")]
 #[test]
 fn with_default() {
     let document = indoc! {"
             TAP version 14
             1..0
-        "};
+    "};
     let mut parser: TapParser = Default::default();
-    assert_statements(
-        parser.parse(document).unwrap(),
-        vec![TapStatement::Plan(crate::TapPlan {
-            count: 0,
-            reason: None,
-        })],
-    )
+    insta::assert_yaml_snapshot!(parser.parse(document).unwrap())
 }
 
 make_test! {FAIL: unsupported_version,
     indoc! {"
             TAP version 42
-        "},
+    "},
     crate::Error::InvalidVersion("42".into()),
-    vec![],
 }

@@ -1,0 +1,39 @@
+---
+source: src/test.rs
+expression: parser.parse(&nested_doc).unwrap()
+---
+- Plan:
+    count: 1
+    reason: ~
+- Subtest:
+    name: inner
+    statements:
+      - Plan:
+          count: 1
+          reason: ~
+      - Subtest:
+          name: subtest
+          statements:
+            - TestPoint:
+                result: true
+                number: 1
+                desc: inside subtest
+                directive: ~
+                yaml: []
+            - Plan:
+                count: 1
+                reason: ~
+          ending:
+            result: true
+            number: 1
+            desc: subtest
+            directive: ~
+            yaml:
+              - yaml_in_subtest
+    ending:
+      result: true
+      number: 1
+      desc: inner
+      directive: ~
+      yaml: []
+
